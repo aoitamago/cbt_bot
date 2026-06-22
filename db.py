@@ -1,15 +1,19 @@
-import sqlite3
+import psycopg2
 import json
+import os
 
-DB_NAME = "cbt.db"
+DB_URL = os.getenv("DATABASE_URL")
+
+def connect():
+    return psycopg2.connect(DB_URL)
 
 def init_db():
-    conn = sqlite3.connect(DB_NAME)
+    conn = connect()
     cur = conn.cursor()
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS questions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         category TEXT,
         question TEXT,
         choices TEXT,
@@ -22,17 +26,17 @@ def init_db():
     conn.close()
 
 def save_questions(category, questions):
-    conn = sqlite3.connect(DB_NAME)
+    conn = connect()
     cur = conn.cursor()
 
     for q in questions:
         cur.execute("""
         INSERT INTO questions (category, question, choices, answer, image)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s)
         """, (
             category,
             q["question"],
-            json.dumps(q["choices"], ensure_ascii=False),
+            json.dumps(q["choices"]),
             q["answer"],
             q.get("image")
         ))
@@ -41,13 +45,13 @@ def save_questions(category, questions):
     conn.close()
 
 def load_questions(category):
-    conn = sqlite3.connect(DB_NAME)
+    conn = connect()
     cur = conn.cursor()
 
     if category == "all":
         cur.execute("SELECT * FROM questions")
     else:
-        cur.execute("SELECT * FROM questions WHERE category=?", (category,))
+        cur.execute("SELECT * FROM questions WHERE category=%s", (category,))
 
     rows = cur.fetchall()
 
@@ -64,7 +68,7 @@ def load_questions(category):
     return questions
 
 def reset_all():
-    conn = sqlite3.connect(DB_NAME)
+    conn = connect()
     cur = conn.cursor()
 
     cur.execute("DELETE FROM questions")
