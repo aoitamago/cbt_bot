@@ -7,7 +7,6 @@ from parser import parse_pdf
 from db import load_questions, reset_all, init_db
 from discord.ui import View, Button
 
-# ✅ 環境変数から取得（重要）
 TOKEN = os.getenv("TOKEN")
 
 intents = discord.Intents.default()
@@ -17,7 +16,7 @@ client = discord.Client(intents=intents)
 user_sessions = {}
 pending_category = {}
 
-# ✅ ボタンUI（1メッセージ統合版）
+# ✅ ボタン
 class AnswerView(View):
     def __init__(self, user_id):
         super().__init__(timeout=120)
@@ -44,8 +43,7 @@ class AnswerView(View):
 
         next_q = session["questions"][session["index"]]
 
-        text = f"{result}\n\n"
-        text += f"📘 {session['category']} Q{session['index']+1}\n\n{next_q['question']}\n\n"
+        text = f"{result}\n\n📘 {session['category']} Q{session['index']+1}\n\n{next_q['question']}\n\n"
         for k, v in next_q["choices"].items():
             text += f"{k}: {v}\n"
 
@@ -59,16 +57,12 @@ class AnswerView(View):
 
     @discord.ui.button(label="A", style=discord.ButtonStyle.primary)
     async def a(self, i, b): await self.handle(i, "A")
-
     @discord.ui.button(label="B", style=discord.ButtonStyle.primary)
     async def b(self, i, b): await self.handle(i, "B")
-
     @discord.ui.button(label="C", style=discord.ButtonStyle.primary)
     async def c(self, i, b): await self.handle(i, "C")
-
     @discord.ui.button(label="D", style=discord.ButtonStyle.primary)
     async def d(self, i, b): await self.handle(i, "D")
-
     @discord.ui.button(label="E", style=discord.ButtonStyle.primary)
     async def e(self, i, b): await self.handle(i, "E")
 
@@ -84,7 +78,10 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # ✅ 分野登録
+    print("📩 受信:", message.content)
+    print("📎 添付:", message.attachments)
+
+    # ✅ loadコマンド
     if message.content.startswith(")load"):
         parts = message.content.split(" ")
 
@@ -93,29 +90,46 @@ async def on_message(message):
             return
 
         pending_category[message.author.id] = parts[1]
+
         await message.channel.send("📄 PDF送ってください")
         return
 
-    # ✅ PDF登録
+    # ✅ PDF処理
     if message.attachments:
+        print("✅ 添付あり")
+
         for att in message.attachments:
-            if att.filename.endswith(".pdf"):
+            print("ファイル:", att.filename)
+
+            # ✅ 小文字化で確実に検出
+            if att.filename.lower().endswith(".pdf"):
 
                 category = pending_category.get(message.author.id)
+                print("カテゴリ:", category)
 
                 if not category:
-                    await message.channel.send("❌ 先に )load 分野")
+                    await message.channel.send("❌ 先に )load 分野名")
                     return
 
                 path = f"./{att.filename}"
                 await att.save(path)
+                print("保存OK")
 
-                count = parse_pdf(path, category)
+                try:
+                    count = parse_pdf(path, category)
+                    print("解析結果:", count)
 
-                await message.channel.send(f"✅ {category}：{count}問登録")
+                    await message.channel.send(f"✅ {category}：{count}問登録")
+                except Exception as e:
+                    print("❌ エラー:", e)
+                    await message.channel.send(f"❌ エラー発生: {e}")
 
                 del pending_category[message.author.id]
                 return
+
+        # ✅ PDFじゃなかった場合
+        await message.channel.send("❌ PDFファイルを送ってください")
+        return
 
     # ✅ CBT開始
     if message.content.startswith(")start"):
@@ -127,10 +141,7 @@ async def on_message(message):
 
         category = parts[1]
 
-        if category == "all":
-            qs = load_questions("all")
-        else:
-            qs = load_questions(category)
+        qs = load_questions(category if category != "all" else "all")
 
         if not qs:
             await message.channel.send("❌ 問題なし")
@@ -154,7 +165,6 @@ async def on_message(message):
         reset_all()
         user_sessions.clear()
         await message.channel.send("✅ 全削除完了")
-        return
 
 
 async def send_question(ctx):
